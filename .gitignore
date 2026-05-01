@@ -1,0 +1,13 @@
+.dotnet/
+.nuget/
+.templateengine/
+.local/
+bin/
+obj/
+publish/
+*.user
+*.suo
+*.log
+*.tmp
+*.nupkg
+*.snupkg
