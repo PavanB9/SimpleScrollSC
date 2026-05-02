@@ -9,8 +9,11 @@ internal static partial class NativeMethods
     internal const uint MOD_NOREPEAT = 0x4000;
 
     internal const int WM_VSCROLL = 0x0115;
+    internal const int WM_MOUSEWHEEL = 0x020A;
     internal const int SB_LINEDOWN = 1;
     internal const int WHEEL_DELTA = 120;
+    internal const int MK_CONTROL = 0x0008;
+    internal const int MK_SHIFT = 0x0004;
     internal const uint INPUT_MOUSE = 0;
     internal const uint MOUSEEVENTF_WHEEL = 0x0800;
     internal const int GA_ROOT = 2;

@@ -7,6 +7,7 @@ public static class ScrollCapture
 {
     private const int ScrollNotchesPerStep = 1;
     private const int GenericLineScrollsPerStep = 3;
+    private const double MinimumMovementDifference = 3.0;
 
     public static async Task<List<CapturedFrame>> CaptureAsync(
         CaptureOptions options,
@@ -14,7 +15,6 @@ public static class ScrollCapture
         CancellationToken cancellationToken)
     {
         ValidateTarget(options.TargetHandle, out NativeMethods.RECT originalBounds);
-        NativeMethods.SetForegroundWindow(options.TargetHandle);
 
         progress?.Report(new CaptureProgress("Capturing", 2, 0, "Waiting 500ms before capture"));
         await Task.Delay(500, cancellationToken);
@@ -23,29 +23,54 @@ public static class ScrollCapture
 
         try
         {
-            CapturedFrame previous = CaptureFrame(options.TargetHandle, originalBounds, options.CropRect);
+            CapturedFrame previous = CaptureFrame(options.TargetHandle, options.IsBrowser, originalBounds, options.CropRect);
             frames.Add(previous);
             progress?.Report(new CaptureProgress("Capturing", 5, frames.Count, "Captured frame 1"));
 
             int frameWidth = previous.Width;
             int frameHeight = previous.Height;
             long bytesPerFrame = (long)frameWidth * frameHeight * 4;
+            double movementThreshold = Math.Max(MinimumMovementDifference, options.DifferenceThreshold + 1);
+            int noMovementStreak = 0;
 
             for (int index = 1; index < options.MaxFrames; index++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 ValidateTargetUnchanged(options.TargetHandle, originalBounds);
 
-                ScrollTarget(options.TargetHandle, options.IsBrowser);
-                await Task.Delay(options.DelayMilliseconds, cancellationToken);
-                ValidateTargetUnchanged(options.TargetHandle, originalBounds);
+                CapturedFrame next = await ScrollAndCaptureNextAsync(
+                    options,
+                    originalBounds,
+                    previous,
+                    movementThreshold,
+                    progress,
+                    cancellationToken);
 
-                CapturedFrame next = CaptureFrame(options.TargetHandle, originalBounds, options.CropRect);
+                double movementDiff = BitmapHelper.AverageDifference(previous, next);
+                if (movementDiff < movementThreshold)
+                {
+                    noMovementStreak++;
+                    progress?.Report(new CaptureProgress("Capturing", null, frames.Count, "Scroll did not move; retrying"));
+
+                    if (options.CaptureMode == CaptureMode.AutoUntilBottom)
+                    {
+                        progress?.Report(new CaptureProgress("Capturing", 90, frames.Count, "Scrolling did not move; stopping"));
+                        break;
+                    }
+
+                    if (noMovementStreak >= 8)
+                    {
+                        throw new InvalidOperationException("Scrolling did not move for several steps. Try bringing the target to the foreground or adjusting the scroll speed.");
+                    }
+
+                    continue;
+                }
+
+                noMovementStreak = 0;
 
                 if (options.CaptureMode == CaptureMode.AutoUntilBottom)
                 {
-                    double difference = BitmapHelper.AverageDifference(previous, next);
-                    if (difference < options.DifferenceThreshold)
+                    if (movementDiff < options.DifferenceThreshold)
                     {
                         progress?.Report(new CaptureProgress("Capturing", 90, frames.Count, "Bottom reached"));
                         break;
@@ -91,10 +116,57 @@ public static class ScrollCapture
         return frames;
     }
 
-    private static void ScrollTarget(IntPtr hwnd, bool isBrowser)
+    private static async Task<CapturedFrame> ScrollAndCaptureNextAsync(
+        CaptureOptions options,
+        NativeMethods.RECT originalBounds,
+        CapturedFrame previous,
+        double movementThreshold,
+        IProgress<CaptureProgress>? progress,
+        CancellationToken cancellationToken)
     {
-        _ = NativeMethods.SetForegroundWindow(hwnd);
+        // First attempt: background scroll (no focus stealing).
+        ScrollTarget(options.TargetHandle, options.IsBrowser, forceForegroundFallback: false);
+        await Task.Delay(options.DelayMilliseconds, cancellationToken);
+        ValidateTargetUnchanged(options.TargetHandle, originalBounds);
 
+        CapturedFrame next = CaptureFrame(options.TargetHandle, options.IsBrowser, originalBounds, options.CropRect);
+        double diff = BitmapHelper.AverageDifference(previous, next);
+        if (diff >= movementThreshold)
+        {
+            return next;
+        }
+
+        // Settle attempt: sometimes the scroll animation is still in-flight.
+        int settleDelay = Math.Clamp(options.DelayMilliseconds / 2, 60, 260);
+        progress?.Report(new CaptureProgress("Capturing", null, 0, $"Settling {settleDelay}ms"));
+        await Task.Delay(settleDelay, cancellationToken);
+        ValidateTargetUnchanged(options.TargetHandle, originalBounds);
+
+        CapturedFrame settled = CaptureFrame(options.TargetHandle, options.IsBrowser, originalBounds, options.CropRect);
+        double settledDiff = BitmapHelper.AverageDifference(previous, settled);
+        if (settledDiff > diff)
+        {
+            next = settled;
+            diff = settledDiff;
+        }
+
+        if (diff >= movementThreshold)
+        {
+            return next;
+        }
+
+        // Fallback: allow focus stealing + SendInput when window-directed scrolling is ignored.
+        ScrollTarget(options.TargetHandle, options.IsBrowser, forceForegroundFallback: true);
+        await Task.Delay(options.DelayMilliseconds, cancellationToken);
+        ValidateTargetUnchanged(options.TargetHandle, originalBounds);
+
+        CapturedFrame fallback = CaptureFrame(options.TargetHandle, options.IsBrowser, originalBounds, options.CropRect);
+        double fallbackDiff = BitmapHelper.AverageDifference(previous, fallback);
+        return fallbackDiff > diff ? fallback : next;
+    }
+
+    private static void ScrollTarget(IntPtr hwnd, bool isBrowser, bool forceForegroundFallback)
+    {
         if (!isBrowser)
         {
             // Traditional Win32 controls often respond to line-down messages without needing focus.
@@ -106,21 +178,34 @@ public static class ScrollCapture
             return;
         }
 
-        // Browsers, Explorer, and many modern controls ignore WM_VSCROLL, so synthesize wheel input.
-        // IMPORTANT: Do not "lock" the cursor; if we reposition it, restore immediately.
+        if (!NativeMethods.GetWindowRect(hwnd, out NativeMethods.RECT rect))
+        {
+            return;
+        }
+
+        int x = rect.Left + (rect.Width / 2);
+        int y = rect.Top + (rect.Height / 2);
+        int delta = -NativeMethods.WHEEL_DELTA * ScrollNotchesPerStep;
+
+        if (!forceForegroundFallback)
+        {
+            // Background wheel message: lParam contains screen coordinates.
+            IntPtr wParam = MakeWParam(0, (short)delta);
+            IntPtr lParam = MakeLParam(x, y);
+            _ = NativeMethods.SendMessage(hwnd, NativeMethods.WM_MOUSEWHEEL, wParam, lParam);
+            return;
+        }
+
+        // Fallback: synthesize wheel input. IMPORTANT: restore cursor immediately.
+        _ = NativeMethods.SetForegroundWindow(hwnd);
+
         NativeMethods.POINT? restoreCursor = null;
         if (NativeMethods.GetCursorPos(out NativeMethods.POINT cursor))
         {
             restoreCursor = cursor;
         }
 
-        if (NativeMethods.GetWindowRect(hwnd, out NativeMethods.RECT rect))
-        {
-            _ = NativeMethods.SetForegroundWindow(hwnd);
-
-            // Move only for the wheel send, then restore.
-            _ = NativeMethods.SetCursorPos(rect.Left + (rect.Width / 2), rect.Top + (rect.Height / 2));
-        }
+        _ = NativeMethods.SetCursorPos(x, y);
 
         NativeMethods.INPUT[] inputs =
         [
@@ -129,7 +214,7 @@ public static class ScrollCapture
                 type = NativeMethods.INPUT_MOUSE,
                 mi = new NativeMethods.MOUSEINPUT
                 {
-                    mouseData = unchecked((uint)(-NativeMethods.WHEEL_DELTA * ScrollNotchesPerStep)),
+                    mouseData = unchecked((uint)delta),
                     dwFlags = NativeMethods.MOUSEEVENTF_WHEEL
                 }
             }
@@ -143,12 +228,41 @@ public static class ScrollCapture
         }
     }
 
-    private static CapturedFrame CaptureFrame(IntPtr hwnd, NativeMethods.RECT bounds, System.Drawing.Rectangle? cropRect)
+    private static IntPtr MakeWParam(short low, short high)
+    {
+        int value = (high << 16) | (ushort)low;
+        return new IntPtr(value);
+    }
+
+    private static IntPtr MakeLParam(int x, int y)
+    {
+        int value = (y << 16) | (x & 0xFFFF);
+        return new IntPtr(value);
+    }
+
+    private static CapturedFrame CaptureFrame(IntPtr hwnd, bool isBrowser, NativeMethods.RECT bounds, System.Drawing.Rectangle? cropRect)
     {
         bool hdrEnabled = HdrInfo.IsHdrEnabledForRect(bounds);
 
-        CapturedFrame? bitBltFrame = TryCaptureWithBitBlt(bounds, hdrEnabled);
-        CapturedFrame? fullFrame = bitBltFrame ?? TryCaptureWithPrintWindow(hwnd, bounds.Width, bounds.Height, hdrEnabled);
+        CapturedFrame? fullFrame;
+        if (!isBrowser)
+        {
+            CapturedFrame? print = TryCaptureWithPrintWindow(hwnd, bounds.Width, bounds.Height, hdrEnabled);
+            if (print is not null && !LooksLikeBlankPrintWindow(print))
+            {
+                fullFrame = print;
+            }
+            else
+            {
+                fullFrame = TryCaptureWithBitBlt(bounds, hdrEnabled);
+            }
+        }
+        else
+        {
+            CapturedFrame? bitBltFrame = TryCaptureWithBitBlt(bounds, hdrEnabled);
+            fullFrame = bitBltFrame ?? TryCaptureWithPrintWindow(hwnd, bounds.Width, bounds.Height, hdrEnabled);
+        }
+
         if (fullFrame is null)
         {
             throw new InvalidOperationException("Unable to capture the target window.");
@@ -160,6 +274,50 @@ public static class ScrollCapture
         }
 
         return BitmapHelper.Crop(fullFrame, cropRect.Value);
+    }
+
+    private static bool LooksLikeBlankPrintWindow(CapturedFrame frame)
+    {
+        // Common failure mode: PrintWindow returns a uniform black frame for GPU/modern surfaces.
+        // Reject only when it's near-uniform and very dark.
+        if (frame.Width <= 0 || frame.Height <= 0)
+        {
+            return true;
+        }
+
+        int xStep = Math.Max(1, frame.Width / 16);
+        int yStep = Math.Max(1, frame.Height / 16);
+        byte min = 255;
+        byte max = 0;
+        long sum = 0;
+        int count = 0;
+
+        for (int y = 0; y < frame.Height; y += yStep)
+        {
+            int row = y * frame.Stride;
+            for (int x = 0; x < frame.Width; x += xStep)
+            {
+                int i = row + (x * 4);
+                byte b = frame.Pixels[i];
+                byte g = frame.Pixels[i + 1];
+                byte r = frame.Pixels[i + 2];
+                byte lum = (byte)((r + g + b) / 3);
+                min = Math.Min(min, lum);
+                max = Math.Max(max, lum);
+                sum += lum;
+                count++;
+            }
+        }
+
+        if (count == 0)
+        {
+            return true;
+        }
+
+        double avg = sum / (double)count;
+        bool nearUniform = (max - min) <= 2;
+        bool veryDark = avg <= 6;
+        return nearUniform && veryDark;
     }
 
     private static CapturedFrame? TryCaptureWithBitBlt(NativeMethods.RECT bounds, bool hdrEnabled)

@@ -34,6 +34,8 @@ This publishes a self-contained Release build and launches `SimpleScrollSC.exe`.
 5. Keep the target window visible and unchanged while capture runs.
 6. Press **Esc** at any time to cancel/stop the capture.
 
+During capture, the SimpleScrollSC window auto-minimizes so it won't accidentally cover the target.
+
 The app waits 500ms before capturing, scrolls the target, detects when the bottom is reached, stitches matching overlaps, and then shows a thumbnail with dimensions and file size. Custom area mode uses slower scrolling by default to improve stitch quality.
 
 The main window is resizable; the preview card updates after each capture.

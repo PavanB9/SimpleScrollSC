@@ -19,6 +19,16 @@ public partial class MainWindow : Window
     private long _captureBytesPerFrame;
     private HwndSource? _hwndSource;
     private const int HotkeyIdEscCancel = 1;
+    private CaptureWindowState? _captureWindowState;
+
+    private sealed class CaptureWindowState
+    {
+        public required string Title { get; init; }
+        public required WindowState WindowState { get; init; }
+        public required double Left { get; init; }
+        public required double Top { get; init; }
+        public required bool Topmost { get; init; }
+    }
 
     private bool IsManualMode => AreaModeToggle?.IsChecked == true;
 
@@ -207,11 +217,6 @@ public partial class MainWindow : Window
                 CropRect: cropRect);
             Progress<CaptureProgress> progress = new(UpdateProgress);
 
-            if (manualMode && cropRect is not null)
-            {
-                TryMoveAwayFromCaptureArea(target, cropRect.Value);
-            }
-
             List<CapturedFrame> frames = await ScrollCapture.CaptureAsync(options, progress, token);
             if (frames.Count == 0)
             {
@@ -294,7 +299,7 @@ public partial class MainWindow : Window
                 ? $"  |  {progress.FrameCount} frames  |  ~{FormatBytes(estimatedBytes)} RAM"
                 : $"  |  {progress.FrameCount} frames";
 
-            suffix += IsManualMode ? "  |  Esc: stop" : "  |  Esc: cancel";
+            suffix += IsManualMode ? "  |  Press Esc to stop" : "  |  Press Esc to cancel";
 
             StatusText.Text = progress.Status + suffix;
         }
@@ -320,9 +325,11 @@ public partial class MainWindow : Window
         if (isCapturing)
         {
             EnsureEscHotkeyRegistered();
+            EnterCaptureWindowState();
         }
         else
         {
+            ExitCaptureWindowState();
             UnregisterEscHotkey();
         }
 
@@ -348,11 +355,70 @@ public partial class MainWindow : Window
 
         if (_isCapturing)
         {
-            CaptureButton.Content = IsManualMode ? "Stop" : "Cancel";
+            CaptureButton.Content = IsManualMode ? "Stop (Esc)" : "Cancel (Esc)";
             return;
         }
 
         CaptureButton.Content = IsManualMode ? "Start" : "Capture";
+    }
+
+    private void EnterCaptureWindowState()
+    {
+        if (_captureWindowState is not null)
+        {
+            return;
+        }
+
+        _captureWindowState = new CaptureWindowState
+        {
+            Title = Title,
+            WindowState = WindowState,
+            Left = Left,
+            Top = Top,
+            Topmost = Topmost
+        };
+
+        Title = IsManualMode ? "SimpleScrollSC — Capturing (Esc to stop)" : "SimpleScrollSC — Capturing (Esc to cancel)";
+
+        StatusText.Text = IsManualMode ? "Capturing — Press Esc to stop" : "Capturing — Press Esc to cancel";
+
+        // Minimize so the app never occludes screen-based captures.
+        // The global Esc hotkey still works while minimized.
+        WindowState = WindowState.Minimized;
+    }
+
+    private void ExitCaptureWindowState()
+    {
+        if (_captureWindowState is null)
+        {
+            return;
+        }
+
+        CaptureWindowState saved = _captureWindowState;
+        _captureWindowState = null;
+
+        Title = saved.Title;
+        Topmost = saved.Topmost;
+
+        // Restore position safely onto a visible screen.
+        (double left, double top) = ClampToVirtualScreen(saved.Left, saved.Top);
+        Left = left;
+        Top = top;
+        WindowState = saved.WindowState;
+    }
+
+    private static (double Left, double Top) ClampToVirtualScreen(double left, double top)
+    {
+        // Keep at least a small portion visible so the window remains draggable.
+        const double margin = 24;
+        double vsLeft = SystemParameters.VirtualScreenLeft;
+        double vsTop = SystemParameters.VirtualScreenTop;
+        double vsRight = vsLeft + SystemParameters.VirtualScreenWidth;
+        double vsBottom = vsTop + SystemParameters.VirtualScreenHeight;
+
+        double clampedLeft = Math.Clamp(left, vsLeft - margin, vsRight - margin);
+        double clampedTop = Math.Clamp(top, vsTop - margin, vsBottom - margin);
+        return (clampedLeft, clampedTop);
     }
 
     private void TryMoveAwayFromCaptureArea(WindowInfo target, Rectangle cropRect)
@@ -437,15 +503,15 @@ public partial class MainWindow : Window
 
     private int GetDelayFromSlider() => (int)Math.Round(SpeedSlider.Value) switch
     {
-        0 => 250,
-        2 => 800,
-        _ => 500
+        0 => 200,
+        2 => 600,
+        _ => 340
     };
 
     private int GetDelayFromSlider(bool manualMode)
     {
         int baseDelay = GetDelayFromSlider();
-        return manualMode ? (int)Math.Round(baseDelay * 1.8) : baseDelay;
+        return manualMode ? (int)Math.Round(baseDelay * 1.3) : baseDelay;
     }
 
     private void UpdateSpeedText()
