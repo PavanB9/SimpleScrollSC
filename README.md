@@ -16,6 +16,15 @@ $env:DOTNET_CLI_TELEMETRY_OPTOUT='1'
 
 On a machine with a normal .NET 8 SDK installed, the same commands work with `dotnet` instead of `.\.dotnet\dotnet.exe`.
 
+## Quick Run
+
+From the repo root:
+
+- `run.cmd` (double-click), or
+- PowerShell: `./run.ps1`
+
+This publishes a self-contained Release build and launches `ScrollShot.exe`.
+
 ## Usage
 
 1. Launch ScrollShot.
