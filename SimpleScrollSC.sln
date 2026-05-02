@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ScrollShot", "ScrollShot\ScrollShot.csproj", "{CB63724F-8B1C-47A3-89DD-7F15F6685992}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SimpleScrollSC", "SimpleScrollSC\SimpleScrollSC.csproj", "{CB63724F-8B1C-47A3-89DD-7F15F6685992}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

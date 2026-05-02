@@ -1,0 +1,9 @@
+﻿<Application x:Class="ScrollShot.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:ScrollShot"
+             StartupUri="MainWindow.xaml">
+    <Application.Resources>
+        <BitmapImage x:Key="AppIcon" UriSource="pack://application:,,,/Assets/icons8-scroll-48.png" />
+    </Application.Resources>
+</Application>

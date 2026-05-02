@@ -1,6 +1,6 @@
-# ScrollShot
+# SimpleScrollSC
 
-ScrollShot is a lightweight Windows desktop app that captures scrolling screenshots of a selected window and stitches the captured viewports into one high-resolution image.
+SimpleScrollSC is a lightweight Windows desktop app that captures scrolling screenshots of a selected window and stitches the captured viewports into one high-resolution image.
 
 ## Build
 
@@ -9,9 +9,9 @@ This repo is set up to keep tooling local. The portable SDK lives in `.dotnet\` 
 ```powershell
 $env:DOTNET_CLI_HOME=(Resolve-Path .).Path
 $env:DOTNET_CLI_TELEMETRY_OPTOUT='1'
-.\.dotnet\dotnet.exe restore ScrollShot.sln --configfile NuGet.Config
-.\.dotnet\dotnet.exe build ScrollShot.sln --no-restore
-.\.dotnet\dotnet.exe publish ScrollShot\ScrollShot.csproj -c Release --no-restore
+\.\.dotnet\dotnet.exe restore SimpleScrollSC.sln --configfile NuGet.Config
+\.\.dotnet\dotnet.exe build SimpleScrollSC.sln --no-restore
+\.\.dotnet\dotnet.exe publish SimpleScrollSC\SimpleScrollSC.csproj -c Release --no-restore
 ```
 
 On a machine with a normal .NET 8 SDK installed, the same commands work with `dotnet` instead of `.\.dotnet\dotnet.exe`.
@@ -23,11 +23,11 @@ From the repo root:
 - `run.cmd` (double-click), or
 - PowerShell: `./run.ps1`
 
-This publishes a self-contained Release build and launches `ScrollShot.exe`.
+This publishes a self-contained Release build and launches `SimpleScrollSC.exe`.
 
 ## Usage
 
-1. Launch ScrollShot.
+1. Launch SimpleScrollSC.
 2. Press **Pick window** and click the window you want to capture.
 3. Pick a scroll speed. Medium is the default and waits 150ms between scroll steps.
 4. Press Capture and choose the PNG or JPEG output path.
@@ -50,5 +50,5 @@ ScrollShot is fully offline. It does not make network calls, collect telemetry, 
 
 ## Icon
 
-ScrollShot currently uses a built-in vector icon for the window/taskbar.
-If you want the exported `ScrollShot.exe` file to have a custom Explorer icon too, add a `.ico` file and set `ApplicationIcon` in `ScrollShot/ScrollShot.csproj`.
+SimpleScrollSC uses `icons8-scroll-48.png` for the window/taskbar icon.
+If you want the exported `SimpleScrollSC.exe` file to have a custom Explorer icon too, add a `.ico` file and set `ApplicationIcon` in `SimpleScrollSC/SimpleScrollSC.csproj`.

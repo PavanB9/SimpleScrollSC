@@ -15,8 +15,12 @@
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
     <DebugType>none</DebugType>
     <DebugSymbols>false</DebugSymbols>
-    <AssemblyName>ScrollShot</AssemblyName>
+    <AssemblyName>SimpleScrollSC</AssemblyName>
     <RootNamespace>ScrollShot</RootNamespace>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\icons8-scroll-48.png" />
+  </ItemGroup>
 
 </Project>
