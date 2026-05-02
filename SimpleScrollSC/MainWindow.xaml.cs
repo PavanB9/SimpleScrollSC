@@ -4,6 +4,8 @@ using ScrollShot.Helpers;
 using System.Drawing;
 using System.IO;
 using System.Windows;
+using System.Windows.Interop;
+using System.Windows.Media;
 
 namespace ScrollShot;
 
@@ -14,6 +16,11 @@ public partial class MainWindow : Window
     private bool _isCapturing;
     private WindowInfo? _selectedTarget;
     private Rectangle? _selectedCropRect;
+    private long _captureBytesPerFrame;
+    private HwndSource? _hwndSource;
+    private const int HotkeyIdEscCancel = 1;
+
+    private bool IsManualMode => AreaModeToggle?.IsChecked == true;
 
     public MainWindow()
     {
@@ -25,6 +32,70 @@ public partial class MainWindow : Window
     {
         UpdateSpeedText();
         AddLog("Idle");
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        try
+        {
+            UnregisterEscHotkey();
+        }
+        finally
+        {
+            base.OnClosed(e);
+        }
+    }
+
+    private void EnsureEscHotkeyRegistered()
+    {
+        if (_hwndSource is not null)
+        {
+            return;
+        }
+
+        IntPtr hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd == IntPtr.Zero)
+        {
+            return;
+        }
+
+        _hwndSource = HwndSource.FromHwnd(hwnd);
+        _hwndSource?.AddHook(WndProc);
+
+        // VK_ESCAPE = 0x1B
+        _ = NativeMethods.RegisterHotKey(hwnd, HotkeyIdEscCancel, NativeMethods.MOD_NOREPEAT, 0x1B);
+    }
+
+    private void UnregisterEscHotkey()
+    {
+        IntPtr hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd != IntPtr.Zero)
+        {
+            _ = NativeMethods.UnregisterHotKey(hwnd, HotkeyIdEscCancel);
+        }
+
+        if (_hwndSource is not null)
+        {
+            _hwndSource.RemoveHook(WndProc);
+            _hwndSource = null;
+        }
+    }
+
+    private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        if (msg == NativeMethods.WM_HOTKEY && wParam == (IntPtr)HotkeyIdEscCancel)
+        {
+            if (_isCapturing)
+            {
+                _captureCancellation?.Cancel();
+                AddLog("Esc hotkey: stop requested");
+                StatusText.Text = IsManualMode ? "Stopping" : "Cancelling";
+            }
+
+            handled = true;
+        }
+
+        return IntPtr.Zero;
     }
 
     private async void PickButton_Click(object sender, RoutedEventArgs e)
@@ -63,10 +134,12 @@ public partial class MainWindow : Window
         {
             _selectedCropRect = null;
             AddLog("Area mode off");
+            UpdateCaptureButtonLabel();
             return;
         }
 
         AddLog("Area mode on");
+        UpdateCaptureButtonLabel();
     }
 
     private async void CaptureButton_Click(object sender, RoutedEventArgs e)
@@ -74,7 +147,8 @@ public partial class MainWindow : Window
         if (_isCapturing)
         {
             _captureCancellation?.Cancel();
-            AddLog("Cancel requested");
+            AddLog(IsManualMode ? "Stop requested" : "Cancel requested");
+            StatusText.Text = IsManualMode ? "Stopping" : "Cancelling";
             return;
         }
 
@@ -82,6 +156,23 @@ public partial class MainWindow : Window
         {
             MessageBox.Show(this, "Pick a target window first.", "SimpleScrollSC", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
+        }
+
+        bool manualMode = IsManualMode;
+
+        Rectangle? cropRect = null;
+        if (manualMode)
+        {
+            cropRect = _selectedCropRect;
+            if (cropRect is null)
+            {
+                cropRect = await TrySelectAreaAsync(target);
+            }
+
+            if (cropRect is null)
+            {
+                return;
+            }
         }
 
         SaveFileDialog dialog = CreateSaveDialog();
@@ -95,71 +186,48 @@ public partial class MainWindow : Window
         _captureCancellation = new CancellationTokenSource();
         CancellationToken token = _captureCancellation.Token;
 
-        bool manualMode = AreaModeToggle?.IsChecked == true;
-
-        Task? overlayTask = null;
-        TaskCompletionSource manualStart = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        _captureBytesPerFrame = 0;
+        if (cropRect is not null)
+        {
+            _captureBytesPerFrame = (long)cropRect.Value.Width * cropRect.Value.Height * 4;
+        }
+        else if (NativeMethods.GetWindowRect(target.Handle, out NativeMethods.RECT bounds))
+        {
+            _captureBytesPerFrame = (long)bounds.Width * bounds.Height * 4;
+        }
 
         try
         {
-            Rectangle? cropRect = null;
-            if (manualMode)
-            {
-                cropRect = _selectedCropRect;
-                if (cropRect is null)
-                {
-                    cropRect = await TrySelectAreaAsync(target);
-                }
-
-                if (cropRect is null)
-                {
-                    throw new OperationCanceledException();
-                }
-
-                overlayTask = ManualCaptureOverlay.RunAsync(
-                    this,
-                    onStart: () =>
-                    {
-                        StatusText.Text = "Capturing";
-                        AddLog("Manual capture started");
-                        manualStart.TrySetResult();
-                    },
-                    onStop: () =>
-                    {
-                        AddLog("Manual stop requested");
-                        _captureCancellation?.Cancel();
-                    },
-                    cancellationToken: token);
-            }
-
             CaptureOptions options = new(
                 target.Handle,
                 target.IsBrowser,
-                GetDelayFromSlider(),
+                GetDelayFromSlider(manualMode),
                 MaxFrames: manualMode ? 2000 : 160,
                 CaptureMode: manualMode ? CaptureMode.ManualStop : CaptureMode.AutoUntilBottom,
                 CropRect: cropRect);
             Progress<CaptureProgress> progress = new(UpdateProgress);
 
-            if (manualMode)
+            if (manualMode && cropRect is not null)
             {
-                StatusText.Text = "Ready";
-                AddLog("Waiting for click-to-start");
-                await manualStart.Task;
+                TryMoveAwayFromCaptureArea(target, cropRect.Value);
             }
 
             List<CapturedFrame> frames = await ScrollCapture.CaptureAsync(options, progress, token);
             if (frames.Count == 0)
             {
+                if (manualMode)
+                {
+                    throw new OperationCanceledException();
+                }
+
                 throw new InvalidOperationException("No frames were captured.");
             }
 
             StatusText.Text = "Stitching";
             AddLog($"Stitching {frames.Count} frame(s)");
 
-            CapturedFrame stitched = await Task.Run(
-                () => ImageStitcher.Stitch(frames, progress, CancellationToken.None),
-                CancellationToken.None);
+            CancellationToken stitchToken = manualMode ? CancellationToken.None : token;
+            CapturedFrame stitched = await Task.Run(() => ImageStitcher.Stitch(frames, progress, stitchToken), stitchToken);
             string extension = Path.GetExtension(outputPath);
             ImageFormat format = extension.Equals(".jpg", StringComparison.OrdinalIgnoreCase) ||
                                  extension.Equals(".jpeg", StringComparison.OrdinalIgnoreCase)
@@ -189,11 +257,6 @@ public partial class MainWindow : Window
         }
         finally
         {
-            if (overlayTask is not null)
-            {
-                try { await overlayTask; } catch { }
-            }
-
             SetCapturingState(false);
             _captureCancellation?.Dispose();
             _captureCancellation = null;
@@ -209,7 +272,7 @@ public partial class MainWindow : Window
 
         return new SaveFileDialog
         {
-            Title = "Save scrolling screenshot",
+            Title = "Save scrolling capture",
             InitialDirectory = desktop,
             FileName = $"SimpleScrollSC_{stamp}.png",
             DefaultExt = ".png",
@@ -221,7 +284,24 @@ public partial class MainWindow : Window
 
     private void UpdateProgress(CaptureProgress progress)
     {
-        StatusText.Text = progress.Status;
+        if (_isCapturing)
+        {
+            long estimatedBytes = _captureBytesPerFrame <= 0
+                ? 0
+                : _captureBytesPerFrame * Math.Max(0, progress.FrameCount);
+
+            string suffix = estimatedBytes > 0
+                ? $"  |  {progress.FrameCount} frames  |  ~{FormatBytes(estimatedBytes)} RAM"
+                : $"  |  {progress.FrameCount} frames";
+
+            suffix += IsManualMode ? "  |  Esc: stop" : "  |  Esc: cancel";
+
+            StatusText.Text = progress.Status + suffix;
+        }
+        else
+        {
+            StatusText.Text = progress.Status;
+        }
         if (progress.ProgressPercent.HasValue)
         {
             ProgressBar.Value = Math.Clamp(progress.ProgressPercent.Value, 0, 100);
@@ -236,7 +316,17 @@ public partial class MainWindow : Window
     private void SetCapturingState(bool isCapturing)
     {
         _isCapturing = isCapturing;
-        CaptureButton.Content = isCapturing ? "Cancel" : "Capture";
+
+        if (isCapturing)
+        {
+            EnsureEscHotkeyRegistered();
+        }
+        else
+        {
+            UnregisterEscHotkey();
+        }
+
+        UpdateCaptureButtonLabel();
         PickButton.IsEnabled = !isCapturing;
         SpeedSlider.IsEnabled = !isCapturing;
         if (AreaModeToggle is not null)
@@ -247,6 +337,77 @@ public partial class MainWindow : Window
         {
             ProgressBar.Value = 0;
         }
+    }
+
+    private void UpdateCaptureButtonLabel()
+    {
+        if (CaptureButton is null)
+        {
+            return;
+        }
+
+        if (_isCapturing)
+        {
+            CaptureButton.Content = IsManualMode ? "Stop" : "Cancel";
+            return;
+        }
+
+        CaptureButton.Content = IsManualMode ? "Start" : "Capture";
+    }
+
+    private void TryMoveAwayFromCaptureArea(WindowInfo target, Rectangle cropRect)
+    {
+        if (!NativeMethods.GetWindowRect(target.Handle, out NativeMethods.RECT bounds))
+        {
+            return;
+        }
+
+        Rectangle captureScreen = new(
+            x: bounds.Left + cropRect.X,
+            y: bounds.Top + cropRect.Y,
+            width: cropRect.Width,
+            height: cropRect.Height);
+
+        DpiScale dpi = VisualTreeHelper.GetDpi(this);
+        Rect captureDip = new(
+            captureScreen.Left / dpi.DpiScaleX,
+            captureScreen.Top / dpi.DpiScaleY,
+            captureScreen.Width / dpi.DpiScaleX,
+            captureScreen.Height / dpi.DpiScaleY);
+
+        double margin = 16;
+        double vsLeft = SystemParameters.VirtualScreenLeft;
+        double vsTop = SystemParameters.VirtualScreenTop;
+        double vsRight = vsLeft + SystemParameters.VirtualScreenWidth;
+        double vsBottom = vsTop + SystemParameters.VirtualScreenHeight;
+
+        var candidates = new (double Left, double Top)[]
+        {
+            (vsLeft + margin, vsTop + margin),
+            (vsRight - this.Width - margin, vsTop + margin),
+            (vsLeft + margin, vsBottom - this.Height - margin),
+            (vsRight - this.Width - margin, vsBottom - this.Height - margin)
+        };
+
+        Rect current = new(this.Left, this.Top, this.Width, this.Height);
+        if (!current.IntersectsWith(captureDip))
+        {
+            return;
+        }
+
+        foreach ((double left, double top) in candidates)
+        {
+            Rect proposed = new(left, top, this.Width, this.Height);
+            if (!proposed.IntersectsWith(captureDip))
+            {
+                this.Left = left;
+                this.Top = top;
+                AddLog("Moved app window out of capture area");
+                return;
+            }
+        }
+
+        AddLog("App window may cover the capture area; move it aside");
     }
 
     private async Task<Rectangle?> TrySelectAreaAsync(WindowInfo target)
@@ -276,10 +437,16 @@ public partial class MainWindow : Window
 
     private int GetDelayFromSlider() => (int)Math.Round(SpeedSlider.Value) switch
     {
-        0 => 80,
-        2 => 300,
-        _ => 150
+        0 => 250,
+        2 => 800,
+        _ => 500
     };
+
+    private int GetDelayFromSlider(bool manualMode)
+    {
+        int baseDelay = GetDelayFromSlider();
+        return manualMode ? (int)Math.Round(baseDelay * 1.8) : baseDelay;
+    }
 
     private void UpdateSpeedText()
     {

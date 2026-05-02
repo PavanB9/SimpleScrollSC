@@ -29,11 +29,12 @@ This publishes a self-contained Release build and launches `SimpleScrollSC.exe`.
 
 1. Launch SimpleScrollSC.
 2. Press **Pick window** and click the window you want to capture.
-3. Pick a scroll speed. Medium is the default and waits 150ms between scroll steps.
+3. Pick a scroll speed. Medium is the default and is intentionally conservative.
 4. Press Capture and choose the PNG or JPEG output path.
 5. Keep the target window visible and unchanged while capture runs.
+6. Press **Esc** at any time to cancel/stop the capture.
 
-The app waits 500ms before capturing, scrolls the target, detects when the bottom is reached, stitches matching overlaps, and then shows a thumbnail with dimensions and file size.
+The app waits 500ms before capturing, scrolls the target, detects when the bottom is reached, stitches matching overlaps, and then shows a thumbnail with dimensions and file size. Custom area mode uses slower scrolling by default to improve stitch quality.
 
 The main window is resizable; the preview card updates after each capture.
 

@@ -5,6 +5,9 @@ namespace ScrollShot.Core;
 
 internal static partial class NativeMethods
 {
+    internal const int WM_HOTKEY = 0x0312;
+    internal const uint MOD_NOREPEAT = 0x4000;
+
     internal const int WM_VSCROLL = 0x0115;
     internal const int SB_LINEDOWN = 1;
     internal const int WHEEL_DELTA = 120;
@@ -63,6 +66,14 @@ internal static partial class NativeMethods
     [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool UnregisterHotKey(IntPtr hWnd, int id);
 
     [LibraryImport("user32.dll")]
     internal static partial IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);

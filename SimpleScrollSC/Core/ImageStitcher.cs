@@ -38,6 +38,12 @@ public static class ImageStitcher
             progress?.Report(new CaptureProgress("Stitching", 90 + (i * 8.0 / frames.Count), i + 1, $"Matched overlap {overlap}px"));
         }
 
+        long totalBytesLong = (long)width * 4 * totalHeight;
+        if (totalBytesLong <= 0 || totalBytesLong > int.MaxValue)
+        {
+            throw new InvalidOperationException("Stitched image too large (safety cap)");
+        }
+
         byte[] output = new byte[width * 4 * totalHeight];
         int destinationY = 0;
 
@@ -73,6 +79,9 @@ public static class ImageStitcher
         int bestRows = 0;
         double bestScore = double.MaxValue;
 
+        int bestAcceptableRows = 0;
+        int continueSearchUntilRows = -1;
+
         for (int rows = maxOverlap; rows >= MinimumOverlapRows; rows--)
         {
             double score = ScoreOverlap(previous, current, rows);
@@ -84,8 +93,29 @@ public static class ImageStitcher
 
             if (score <= AcceptableOverlapScore)
             {
-                return rows;
+                // Don't immediately return the first acceptable overlap.
+                // Keep searching a bit further for a smaller acceptable overlap to avoid
+                // overly-aggressive cropping when patterns repeat.
+                if (bestAcceptableRows == 0 || rows < bestAcceptableRows)
+                {
+                    bestAcceptableRows = rows;
+                }
+
+                if (continueSearchUntilRows < 0)
+                {
+                    continueSearchUntilRows = Math.Max(MinimumOverlapRows, rows - 96);
+                }
+
+                if (rows <= continueSearchUntilRows)
+                {
+                    return bestAcceptableRows;
+                }
             }
+        }
+
+        if (bestAcceptableRows != 0)
+        {
+            return bestAcceptableRows;
         }
 
         return bestScore <= AcceptableOverlapScore * 1.8 ? bestRows : 0;

@@ -5,8 +5,8 @@ namespace ScrollShot.Core;
 
 public static class ScrollCapture
 {
-    private const int ScrollNotchesPerStep = 5;
-    private const int GenericLineScrollsPerStep = 10;
+    private const int ScrollNotchesPerStep = 1;
+    private const int GenericLineScrollsPerStep = 3;
 
     public static async Task<List<CapturedFrame>> CaptureAsync(
         CaptureOptions options,
@@ -26,6 +26,10 @@ public static class ScrollCapture
             CapturedFrame previous = CaptureFrame(options.TargetHandle, originalBounds, options.CropRect);
             frames.Add(previous);
             progress?.Report(new CaptureProgress("Capturing", 5, frames.Count, "Captured frame 1"));
+
+            int frameWidth = previous.Width;
+            int frameHeight = previous.Height;
+            long bytesPerFrame = (long)frameWidth * frameHeight * 4;
 
             for (int index = 1; index < options.MaxFrames; index++)
             {
@@ -52,12 +56,35 @@ public static class ScrollCapture
 
                 frames.Add(next);
 
+                // Safety caps: prevent runaway RAM and stitched output overflows.
+                long estimatedCapturedBytes = bytesPerFrame * frames.Count;
+                long estimatedOutputPixels = (long)frameWidth * frameHeight * frames.Count;
+                if (estimatedCapturedBytes > options.MaxCapturedBytes || estimatedOutputPixels > options.MaxEstimatedOutputPixels)
+                {
+                    string reason = estimatedCapturedBytes > options.MaxCapturedBytes
+                        ? "Safety cap reached (RAM)"
+                        : "Safety cap reached (max output)";
+
+                    progress?.Report(new CaptureProgress("Capturing", 90, frames.Count, reason));
+                    if (options.CaptureMode == CaptureMode.ManualStop)
+                    {
+                        break;
+                    }
+
+                    throw new InvalidOperationException(reason);
+                }
+
                 double percent = Math.Min(88, 5 + (frames.Count * 85.0 / options.MaxFrames));
                 progress?.Report(new CaptureProgress("Capturing", percent, frames.Count, $"Captured frame {frames.Count}"));
             }
         }
         catch (OperationCanceledException)
         {
+            if (options.CaptureMode != CaptureMode.ManualStop)
+            {
+                throw;
+            }
+
             progress?.Report(new CaptureProgress("Capturing", 90, frames.Count, "Stopped"));
         }
 
@@ -66,6 +93,8 @@ public static class ScrollCapture
 
     private static void ScrollTarget(IntPtr hwnd, bool isBrowser)
     {
+        _ = NativeMethods.SetForegroundWindow(hwnd);
+
         if (!isBrowser)
         {
             // Traditional Win32 controls often respond to line-down messages without needing focus.
@@ -73,12 +102,23 @@ public static class ScrollCapture
             {
                 NativeMethods.SendMessage(hwnd, NativeMethods.WM_VSCROLL, new IntPtr(NativeMethods.SB_LINEDOWN), IntPtr.Zero);
             }
+
+            return;
         }
 
-        // Browsers, Explorer, and many modern controls ignore WM_VSCROLL, so synthesize wheel input at the center.
+        // Browsers, Explorer, and many modern controls ignore WM_VSCROLL, so synthesize wheel input.
+        // IMPORTANT: Do not "lock" the cursor; if we reposition it, restore immediately.
+        NativeMethods.POINT? restoreCursor = null;
+        if (NativeMethods.GetCursorPos(out NativeMethods.POINT cursor))
+        {
+            restoreCursor = cursor;
+        }
+
         if (NativeMethods.GetWindowRect(hwnd, out NativeMethods.RECT rect))
         {
             _ = NativeMethods.SetForegroundWindow(hwnd);
+
+            // Move only for the wheel send, then restore.
             _ = NativeMethods.SetCursorPos(rect.Left + (rect.Width / 2), rect.Top + (rect.Height / 2));
         }
 
@@ -96,6 +136,11 @@ public static class ScrollCapture
         ];
 
         _ = NativeMethods.SendInput(1, inputs, Marshal.SizeOf<NativeMethods.INPUT>());
+
+        if (restoreCursor is not null)
+        {
+            _ = NativeMethods.SetCursorPos(restoreCursor.Value.X, restoreCursor.Value.Y);
+        }
     }
 
     private static CapturedFrame CaptureFrame(IntPtr hwnd, NativeMethods.RECT bounds, System.Drawing.Rectangle? cropRect)
