@@ -51,4 +51,5 @@ ScrollShot is fully offline. It does not make network calls, collect telemetry, 
 ## Icon
 
 SimpleScrollSC uses `icons8-scroll-48.png` for the window/taskbar icon.
+Icon credit: Icons by Icons8 — https://icons8.com
 If you want the exported `SimpleScrollSC.exe` file to have a custom Explorer icon too, add a `.ico` file and set `ApplicationIcon` in `SimpleScrollSC/SimpleScrollSC.csproj`.
