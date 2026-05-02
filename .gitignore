@@ -2,11 +2,15 @@
 .nuget/
 .templateengine/
 .local/
+.vs/
 bin/
 obj/
 publish/
+TestResults/
 *.user
 *.suo
+*.userosscache
+*.sln.docstates
 *.log
 *.tmp
 *.nupkg

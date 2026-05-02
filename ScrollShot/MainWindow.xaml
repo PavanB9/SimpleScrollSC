@@ -5,11 +5,16 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="ScrollShot"
-        Height="292"
-        Width="392"
-        ResizeMode="CanMinimize"
+    Icon="{StaticResource AppIcon}"
+    Height="420"
+    Width="560"
+    MinHeight="380"
+    MinWidth="520"
+    ResizeMode="CanResize"
         WindowStartupLocation="CenterScreen"
         Background="#F6F7F9"
+    UseLayoutRounding="True"
+    SnapsToDevicePixels="True"
         Loaded="Window_Loaded">
     <Grid Margin="14">
         <Grid.RowDefinitions>
@@ -28,26 +33,34 @@
 
         <Grid Grid.Row="1" Margin="0,12,0,0">
             <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="72"/>
                 <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="36"/>
-                <ColumnDefinition Width="36"/>
+                <ColumnDefinition Width="128"/>
             </Grid.ColumnDefinitions>
 
-            <ComboBox x:Name="WindowCombo"
-                      Height="30"
-                      VerticalContentAlignment="Center"
-                      ItemsSource="{Binding Windows}"
-                      ToolTip="Open windows"/>
-            <Button Grid.Column="1"
-                    x:Name="RefreshButton"
-                    Margin="6,0,0,0"
-                    Content="&#x21BB;"
-                    ToolTip="Refresh windows"
-                    Click="RefreshButton_Click"/>
+            <TextBlock Text="Target"
+                       VerticalAlignment="Center"
+                       Foreground="#374151"/>
+
+            <Border Grid.Column="1"
+                    Height="30"
+                    Padding="10,0"
+                    Background="White"
+                    BorderBrush="#D7DAE0"
+                    BorderThickness="1"
+                    CornerRadius="4">
+                <TextBlock x:Name="TargetText"
+                           Text="No target selected"
+                           VerticalAlignment="Center"
+                           Foreground="#1F2937"
+                           TextTrimming="CharacterEllipsis"/>
+            </Border>
+
             <Button Grid.Column="2"
                     x:Name="PickButton"
-                    Margin="6,0,0,0"
-                    Content="&#x2316;"
+                    Margin="10,0,0,0"
+                    Height="30"
+                    Content="Pick window"
                     ToolTip="Pick a window"
                     Click="PickButton_Click"/>
         </Grid>
@@ -104,11 +117,11 @@
                 CornerRadius="6">
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="92"/>
+                    <ColumnDefinition Width="112"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
                 <Border Width="82"
-                        Height="62"
+                        Height="74"
                         Background="#ECEFF3"
                         BorderBrush="#D7DAE0"
                         BorderThickness="1">

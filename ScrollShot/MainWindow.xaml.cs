@@ -1,7 +1,6 @@
 using Microsoft.Win32;
 using ScrollShot.Core;
 using ScrollShot.Helpers;
-using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows;
 
@@ -9,12 +8,10 @@ namespace ScrollShot;
 
 public partial class MainWindow : Window
 {
-    private readonly ObservableCollection<WindowInfo> _windows = [];
     private readonly List<string> _log = [];
     private CancellationTokenSource? _captureCancellation;
     private bool _isCapturing;
-
-    public ObservableCollection<WindowInfo> Windows => _windows;
+    private WindowInfo? _selectedTarget;
 
     public MainWindow()
     {
@@ -24,12 +21,9 @@ public partial class MainWindow : Window
 
     private void Window_Loaded(object sender, RoutedEventArgs e)
     {
-        RefreshWindows();
         UpdateSpeedText();
         AddLog("Idle");
     }
-
-    private void RefreshButton_Click(object sender, RoutedEventArgs e) => RefreshWindows();
 
     private async void PickButton_Click(object sender, RoutedEventArgs e)
     {
@@ -49,16 +43,9 @@ public partial class MainWindow : Window
             return;
         }
 
-        RefreshWindows();
-        WindowInfo? match = _windows.FirstOrDefault(window => window.Handle == picked.Handle);
-        if (match is null)
-        {
-            _windows.Insert(0, picked);
-            match = picked;
-        }
-
-        WindowCombo.SelectedItem = match;
-        AddLog($"Picked {match.Title}");
+        _selectedTarget = picked;
+        TargetText.Text = picked.Title;
+        AddLog($"Picked {picked.Title}");
         StatusText.Text = "Idle";
     }
 
@@ -71,9 +58,9 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (WindowCombo.SelectedItem is not WindowInfo target)
+        if (_selectedTarget is not WindowInfo target)
         {
-            MessageBox.Show(this, "Choose a target window first.", "ScrollShot", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(this, "Pick a target window first.", "ScrollShot", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
 
@@ -140,27 +127,6 @@ public partial class MainWindow : Window
 
     private void SpeedSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e) => UpdateSpeedText();
 
-    private void RefreshWindows()
-    {
-        WindowInfo? current = WindowCombo.SelectedItem as WindowInfo;
-        IntPtr ownHandle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
-        _windows.Clear();
-
-        foreach (WindowInfo window in WindowEnumerator.GetOpenWindows())
-        {
-            if (window.Handle != ownHandle)
-            {
-                _windows.Add(window);
-            }
-        }
-
-        WindowCombo.SelectedItem = current is null
-            ? _windows.FirstOrDefault(window => window.IsBrowser) ?? _windows.FirstOrDefault()
-            : _windows.FirstOrDefault(window => window.Handle == current.Handle) ?? _windows.FirstOrDefault();
-
-        AddLog($"Found {_windows.Count} window(s)");
-    }
-
     private SaveFileDialog CreateSaveDialog()
     {
         string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
@@ -196,8 +162,6 @@ public partial class MainWindow : Window
     {
         _isCapturing = isCapturing;
         CaptureButton.Content = isCapturing ? "Cancel" : "Capture";
-        WindowCombo.IsEnabled = !isCapturing;
-        RefreshButton.IsEnabled = !isCapturing;
         PickButton.IsEnabled = !isCapturing;
         SpeedSlider.IsEnabled = !isCapturing;
         if (isCapturing)

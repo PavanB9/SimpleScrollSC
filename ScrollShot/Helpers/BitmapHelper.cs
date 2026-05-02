@@ -14,7 +14,7 @@ public enum ImageFormat
 
 public static class BitmapHelper
 {
-    public static CapturedFrame FromHBitmap(IntPtr hBitmap)
+    public static CapturedFrame FromHBitmap(IntPtr hBitmap, bool applyHdrColorConversion)
     {
         BitmapSource source = Imaging.CreateBitmapSourceFromHBitmap(
             hBitmap,
@@ -29,7 +29,67 @@ public static class BitmapHelper
         int stride = bgra.PixelWidth * 4;
         byte[] pixels = new byte[stride * bgra.PixelHeight];
         bgra.CopyPixels(pixels, stride, 0);
+
+        if (applyHdrColorConversion)
+        {
+            ToneMapHdrToSdrInPlace(pixels);
+        }
+
+        for (int i = 3; i < pixels.Length; i += 4)
+        {
+            pixels[i] = 255;
+        }
+
         return new CapturedFrame(bgra.PixelWidth, bgra.PixelHeight, pixels);
+    }
+
+    private static void ToneMapHdrToSdrInPlace(byte[] bgraPixels)
+    {
+        // Best-effort HDR->SDR: compress highlights and restore perceived contrast.
+        // Runs ONLY when HDR is enabled on the monitor (see HdrInfo).
+        const double exposure = 0.85;
+
+        for (int i = 0; i < bgraPixels.Length; i += 4)
+        {
+            double b = SrgbToLinear(bgraPixels[i] / 255.0);
+            double g = SrgbToLinear(bgraPixels[i + 1] / 255.0);
+            double r = SrgbToLinear(bgraPixels[i + 2] / 255.0);
+
+            r *= exposure;
+            g *= exposure;
+            b *= exposure;
+
+            r = Reinhard(r);
+            g = Reinhard(g);
+            b = Reinhard(b);
+
+            bgraPixels[i] = (byte)Math.Clamp((int)Math.Round(LinearToSrgb(b) * 255.0), 0, 255);
+            bgraPixels[i + 1] = (byte)Math.Clamp((int)Math.Round(LinearToSrgb(g) * 255.0), 0, 255);
+            bgraPixels[i + 2] = (byte)Math.Clamp((int)Math.Round(LinearToSrgb(r) * 255.0), 0, 255);
+        }
+    }
+
+    private static double Reinhard(double x) => x / (1.0 + x);
+
+    private static double SrgbToLinear(double c)
+    {
+        if (c <= 0.04045)
+        {
+            return c / 12.92;
+        }
+
+        return Math.Pow((c + 0.055) / 1.055, 2.4);
+    }
+
+    private static double LinearToSrgb(double c)
+    {
+        c = Math.Clamp(c, 0.0, 1.0);
+        if (c <= 0.0031308)
+        {
+            return 12.92 * c;
+        }
+
+        return 1.055 * Math.Pow(c, 1.0 / 2.4) - 0.055;
     }
 
     public static double AverageDifference(CapturedFrame left, CapturedFrame right)

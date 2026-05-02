@@ -19,12 +19,14 @@ On a machine with a normal .NET 8 SDK installed, the same commands work with `do
 ## Usage
 
 1. Launch ScrollShot.
-2. Choose a target from the window dropdown, or press the crosshair button and click a window.
+2. Press **Pick window** and click the window you want to capture.
 3. Pick a scroll speed. Medium is the default and waits 150ms between scroll steps.
 4. Press Capture and choose the PNG or JPEG output path.
 5. Keep the target window visible and unchanged while capture runs.
 
 The app waits 500ms before capturing, scrolls the target, detects when the bottom is reached, stitches matching overlaps, and then shows a thumbnail with dimensions and file size.
+
+The main window is resizable; the preview card updates after each capture.
 
 ## Known Limitations
 
@@ -36,3 +38,8 @@ The app waits 500ms before capturing, scrolls the target, detects when the botto
 - Browser capture uses mouse wheel simulation at the window center, so the intended scrollable area must be under that point.
 
 ScrollShot is fully offline. It does not make network calls, collect telemetry, or run in the background.
+
+## Icon
+
+ScrollShot currently uses a built-in vector icon for the window/taskbar.
+If you want the exported `ScrollShot.exe` file to have a custom Explorer icon too, add a `.ico` file and set `ApplicationIcon` in `ScrollShot/ScrollShot.csproj`.

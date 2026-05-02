@@ -87,17 +87,19 @@ public static class ScrollCapture
 
     private static CapturedFrame CaptureFrame(IntPtr hwnd, NativeMethods.RECT bounds)
     {
-        CapturedFrame? bitBltFrame = TryCaptureWithBitBlt(bounds);
+        bool hdrEnabled = HdrInfo.IsHdrEnabledForRect(bounds);
+
+        CapturedFrame? bitBltFrame = TryCaptureWithBitBlt(bounds, hdrEnabled);
         if (bitBltFrame is not null)
         {
             return bitBltFrame;
         }
 
-        CapturedFrame? printWindowFrame = TryCaptureWithPrintWindow(hwnd, bounds.Width, bounds.Height);
+        CapturedFrame? printWindowFrame = TryCaptureWithPrintWindow(hwnd, bounds.Width, bounds.Height, hdrEnabled);
         return printWindowFrame ?? throw new InvalidOperationException("Unable to capture the target window.");
     }
 
-    private static CapturedFrame? TryCaptureWithBitBlt(NativeMethods.RECT bounds)
+    private static CapturedFrame? TryCaptureWithBitBlt(NativeMethods.RECT bounds, bool hdrEnabled)
     {
         IntPtr screenDc = NativeMethods.GetDC(IntPtr.Zero);
         if (screenDc == IntPtr.Zero)
@@ -126,7 +128,7 @@ public static class ScrollCapture
                 bounds.Top,
                 NativeMethods.SRCCOPY | NativeMethods.CAPTUREBLT);
 
-            return ok ? BitmapHelper.FromHBitmap(bitmap) : null;
+            return ok ? BitmapHelper.FromHBitmap(bitmap, hdrEnabled) : null;
         }
         finally
         {
@@ -149,7 +151,7 @@ public static class ScrollCapture
         }
     }
 
-    private static CapturedFrame? TryCaptureWithPrintWindow(IntPtr hwnd, int width, int height)
+    private static CapturedFrame? TryCaptureWithPrintWindow(IntPtr hwnd, int width, int height, bool hdrEnabled)
     {
         IntPtr screenDc = NativeMethods.GetDC(IntPtr.Zero);
         if (screenDc == IntPtr.Zero)
@@ -168,7 +170,7 @@ public static class ScrollCapture
             oldBitmap = NativeMethods.SelectObject(memoryDc, bitmap);
 
             bool ok = NativeMethods.PrintWindow(hwnd, memoryDc, NativeMethods.PW_RENDERFULLCONTENT);
-            return ok ? BitmapHelper.FromHBitmap(bitmap) : null;
+            return ok ? BitmapHelper.FromHBitmap(bitmap, hdrEnabled) : null;
         }
         finally
         {

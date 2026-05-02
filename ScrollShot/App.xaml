@@ -4,6 +4,56 @@
              xmlns:local="clr-namespace:ScrollShot"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
-         
+        <DrawingImage x:Key="AppIcon">
+            <DrawingImage.Drawing>
+                <DrawingGroup>
+                    <GeometryDrawing Brush="#F6F7F9">
+                        <GeometryDrawing.Geometry>
+                            <RectangleGeometry Rect="0,0,64,64" RadiusX="12" RadiusY="12" />
+                        </GeometryDrawing.Geometry>
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="#D7DAE0" Thickness="2" />
+                        </GeometryDrawing.Pen>
+                    </GeometryDrawing>
+
+                    <GeometryDrawing>
+                        <GeometryDrawing.Brush>
+                            <SolidColorBrush Color="#1F2937" />
+                        </GeometryDrawing.Brush>
+                        <GeometryDrawing.Geometry>
+                            <GeometryGroup>
+                                <RectangleGeometry Rect="18,16,28,32" RadiusX="6" RadiusY="6" />
+                                <RectangleGeometry Rect="23,22,18,2" />
+                                <RectangleGeometry Rect="23,28,18,2" />
+                                <RectangleGeometry Rect="23,34,18,2" />
+                            </GeometryGroup>
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+
+                    <GeometryDrawing>
+                        <GeometryDrawing.Pen>
+                            <Pen Brush="#1F2937" Thickness="4" StartLineCap="Round" EndLineCap="Round" />
+                        </GeometryDrawing.Pen>
+                        <GeometryDrawing.Geometry>
+                            <LineGeometry StartPoint="50,20" EndPoint="50,44" />
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+
+                    <GeometryDrawing>
+                        <GeometryDrawing.Brush>
+                            <SolidColorBrush Color="#1F2937" />
+                        </GeometryDrawing.Brush>
+                        <GeometryDrawing.Geometry>
+                            <PathGeometry>
+                                <PathFigure StartPoint="50,48" IsClosed="True">
+                                    <LineSegment Point="44,40" />
+                                    <LineSegment Point="56,40" />
+                                </PathFigure>
+                            </PathGeometry>
+                        </GeometryDrawing.Geometry>
+                    </GeometryDrawing>
+                </DrawingGroup>
+            </DrawingImage.Drawing>
+        </DrawingImage>
     </Application.Resources>
 </Application>
