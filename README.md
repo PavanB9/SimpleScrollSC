@@ -46,10 +46,12 @@ The main window is resizable; the preview card updates after each capture.
 - Some applications reject synthetic scroll input or use nonstandard scrolling surfaces.
 - Browser capture uses mouse wheel simulation at the window center, so the intended scrollable area must be under that point.
 
-ScrollShot is fully offline. It does not make network calls, collect telemetry, or run in the background.
+SimpleScrollSC is fully offline. It does not make network calls, collect telemetry, or run in the background.
 
 ## Icon
 
 SimpleScrollSC uses `icons8-scroll-48.png` for the window/taskbar icon.
 Icon credit: Icons by Icons8 — https://icons8.com
-If you want the exported `SimpleScrollSC.exe` file to have a custom Explorer icon too, add a `.ico` file and set `ApplicationIcon` in `SimpleScrollSC/SimpleScrollSC.csproj`.
+The Explorer icon for `SimpleScrollSC.exe` uses `AppIcon.ico`, configured via `ApplicationIcon` in `SimpleScrollSC/SimpleScrollSC.csproj`.
+
+Note: Windows Explorer caches icons; if it doesnt update right away, refresh the folder (F5) or restart Explorer.

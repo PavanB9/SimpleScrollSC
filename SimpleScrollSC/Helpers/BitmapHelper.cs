@@ -1,4 +1,5 @@
 using ScrollShot.Core;
+using System.Drawing;
 using System.IO;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -14,6 +15,33 @@ public enum ImageFormat
 
 public static class BitmapHelper
 {
+    public static CapturedFrame Crop(CapturedFrame frame, Rectangle crop)
+    {
+        if (frame.Width <= 0 || frame.Height <= 0)
+        {
+            throw new ArgumentException("Frame is empty.", nameof(frame));
+        }
+
+        Rectangle bounds = new(0, 0, frame.Width, frame.Height);
+        Rectangle clipped = Rectangle.Intersect(bounds, crop);
+        if (clipped.Width <= 0 || clipped.Height <= 0)
+        {
+            throw new ArgumentException("Crop rectangle is outside the frame.", nameof(crop));
+        }
+
+        int outStride = clipped.Width * 4;
+        byte[] output = new byte[outStride * clipped.Height];
+
+        for (int row = 0; row < clipped.Height; row++)
+        {
+            int srcOffset = ((clipped.Y + row) * frame.Stride) + (clipped.X * 4);
+            int dstOffset = row * outStride;
+            Buffer.BlockCopy(frame.Pixels, srcOffset, output, dstOffset, outStride);
+        }
+
+        return new CapturedFrame(clipped.Width, clipped.Height, output);
+    }
+
     public static CapturedFrame FromHBitmap(IntPtr hBitmap, bool applyHdrColorConversion)
     {
         BitmapSource source = Imaging.CreateBitmapSourceFromHBitmap(

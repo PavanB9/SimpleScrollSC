@@ -20,32 +20,45 @@ public static class ScrollCapture
         await Task.Delay(500, cancellationToken);
 
         List<CapturedFrame> frames = [];
-        CapturedFrame previous = CaptureFrame(options.TargetHandle, originalBounds);
-        frames.Add(previous);
-        progress?.Report(new CaptureProgress("Capturing", 5, frames.Count, "Captured frame 1"));
 
-        for (int index = 1; index < options.MaxFrames; index++)
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            ValidateTargetUnchanged(options.TargetHandle, originalBounds);
+            CapturedFrame previous = CaptureFrame(options.TargetHandle, originalBounds, options.CropRect);
+            frames.Add(previous);
+            progress?.Report(new CaptureProgress("Capturing", 5, frames.Count, "Captured frame 1"));
 
-            ScrollTarget(options.TargetHandle, options.IsBrowser);
-            await Task.Delay(options.DelayMilliseconds, cancellationToken);
-            ValidateTargetUnchanged(options.TargetHandle, originalBounds);
-
-            CapturedFrame next = CaptureFrame(options.TargetHandle, originalBounds);
-            double difference = BitmapHelper.AverageDifference(previous, next);
-            if (difference < options.DifferenceThreshold)
+            for (int index = 1; index < options.MaxFrames; index++)
             {
-                progress?.Report(new CaptureProgress("Capturing", 90, frames.Count, "Bottom reached"));
-                break;
+                cancellationToken.ThrowIfCancellationRequested();
+                ValidateTargetUnchanged(options.TargetHandle, originalBounds);
+
+                ScrollTarget(options.TargetHandle, options.IsBrowser);
+                await Task.Delay(options.DelayMilliseconds, cancellationToken);
+                ValidateTargetUnchanged(options.TargetHandle, originalBounds);
+
+                CapturedFrame next = CaptureFrame(options.TargetHandle, originalBounds, options.CropRect);
+
+                if (options.CaptureMode == CaptureMode.AutoUntilBottom)
+                {
+                    double difference = BitmapHelper.AverageDifference(previous, next);
+                    if (difference < options.DifferenceThreshold)
+                    {
+                        progress?.Report(new CaptureProgress("Capturing", 90, frames.Count, "Bottom reached"));
+                        break;
+                    }
+
+                    previous = next;
+                }
+
+                frames.Add(next);
+
+                double percent = Math.Min(88, 5 + (frames.Count * 85.0 / options.MaxFrames));
+                progress?.Report(new CaptureProgress("Capturing", percent, frames.Count, $"Captured frame {frames.Count}"));
             }
-
-            frames.Add(next);
-            previous = next;
-
-            double percent = Math.Min(88, 5 + (frames.Count * 85.0 / options.MaxFrames));
-            progress?.Report(new CaptureProgress("Capturing", percent, frames.Count, $"Captured frame {frames.Count}"));
+        }
+        catch (OperationCanceledException)
+        {
+            progress?.Report(new CaptureProgress("Capturing", 90, frames.Count, "Stopped"));
         }
 
         return frames;
@@ -85,18 +98,23 @@ public static class ScrollCapture
         _ = NativeMethods.SendInput(1, inputs, Marshal.SizeOf<NativeMethods.INPUT>());
     }
 
-    private static CapturedFrame CaptureFrame(IntPtr hwnd, NativeMethods.RECT bounds)
+    private static CapturedFrame CaptureFrame(IntPtr hwnd, NativeMethods.RECT bounds, System.Drawing.Rectangle? cropRect)
     {
         bool hdrEnabled = HdrInfo.IsHdrEnabledForRect(bounds);
 
         CapturedFrame? bitBltFrame = TryCaptureWithBitBlt(bounds, hdrEnabled);
-        if (bitBltFrame is not null)
+        CapturedFrame? fullFrame = bitBltFrame ?? TryCaptureWithPrintWindow(hwnd, bounds.Width, bounds.Height, hdrEnabled);
+        if (fullFrame is null)
         {
-            return bitBltFrame;
+            throw new InvalidOperationException("Unable to capture the target window.");
         }
 
-        CapturedFrame? printWindowFrame = TryCaptureWithPrintWindow(hwnd, bounds.Width, bounds.Height, hdrEnabled);
-        return printWindowFrame ?? throw new InvalidOperationException("Unable to capture the target window.");
+        if (cropRect is null)
+        {
+            return fullFrame;
+        }
+
+        return BitmapHelper.Crop(fullFrame, cropRect.Value);
     }
 
     private static CapturedFrame? TryCaptureWithBitBlt(NativeMethods.RECT bounds, bool hdrEnabled)

@@ -66,6 +66,10 @@
         </Grid>
 
         <Grid Grid.Row="2" Margin="0,14,0,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="72"/>
                 <ColumnDefinition Width="*"/>
@@ -88,6 +92,16 @@
                        HorizontalAlignment="Right"
                        VerticalAlignment="Center"
                        Foreground="#374151"/>
+
+            <CheckBox Grid.Row="1"
+                      Grid.Column="1"
+                      Grid.ColumnSpan="2"
+                      x:Name="AreaModeToggle"
+                      Margin="0,8,0,0"
+                      Content="Select area + click-to-start/stop"
+                      Foreground="#1F2937"
+                      Checked="AreaModeToggle_Changed"
+                      Unchecked="AreaModeToggle_Changed"/>
         </Grid>
 
         <Grid Grid.Row="3" Margin="0,14,0,0">
