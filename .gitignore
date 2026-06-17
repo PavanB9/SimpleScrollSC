@@ -1,5 +1,6 @@
 .dotnet/
 .nuget/
+dotnet-install.ps1
 .templateengine/
 .local/
 .vs/
