@@ -6,6 +6,15 @@ SimpleScrollSC is a lightweight Windows desktop app that captures scrolling scre
 
 This repo is set up to keep tooling local. The portable SDK lives in `.dotnet\` and is intentionally ignored by Git.
 
+If you don't have the local SDK yet, bootstrap it once (this stays inside the repo and is not committed):
+
+```powershell
+Invoke-WebRequest https://dot.net/v1/dotnet-install.ps1 -OutFile dotnet-install.ps1
+./dotnet-install.ps1 -Channel 8.0 -InstallDir .dotnet
+```
+
+Then build and publish:
+
 ```powershell
 $env:DOTNET_CLI_HOME=(Resolve-Path .).Path
 $env:DOTNET_CLI_TELEMETRY_OPTOUT='1'
