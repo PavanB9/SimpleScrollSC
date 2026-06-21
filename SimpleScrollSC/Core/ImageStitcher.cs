@@ -70,17 +70,21 @@ public static class ImageStitcher
 
     private static int FindOverlap(CapturedFrame previous, CapturedFrame current)
     {
-        int maxOverlap = Math.Min(Math.Min(previous.Height, current.Height), previous.Height * 3 / 4);
+        // Search almost the whole frame. A slow/small scroll step (e.g. one wheel notch on a tall
+        // window) leaves consecutive frames overlapping by 85-95%, so an earlier 75%-height ceiling
+        // could never reach the real alignment and the stitch would stack near-duplicate frames.
+        int maxOverlap = Math.Min(previous.Height, current.Height) - 1;
         if (maxOverlap < MinimumOverlapRows)
         {
             return 0;
         }
 
+        // Pick the alignment with the lowest pixel-difference score. For genuinely scrolled
+        // content the true overlap is near pixel-identical, so it scores far below any misaligned
+        // candidate even when rows look similar (e.g. a list of emails). Choosing the global best
+        // avoids both under-cropping (duplicate seams) and over-cropping (dropped content).
         int bestRows = 0;
         double bestScore = double.MaxValue;
-
-        int bestAcceptableRows = 0;
-        int continueSearchUntilRows = -1;
 
         for (int rows = maxOverlap; rows >= MinimumOverlapRows; rows--)
         {
@@ -90,34 +94,10 @@ public static class ImageStitcher
                 bestScore = score;
                 bestRows = rows;
             }
-
-            if (score <= AcceptableOverlapScore)
-            {
-                // Don't immediately return the first acceptable overlap.
-                // Keep searching a bit further for a smaller acceptable overlap to avoid
-                // overly-aggressive cropping when patterns repeat.
-                if (bestAcceptableRows == 0 || rows < bestAcceptableRows)
-                {
-                    bestAcceptableRows = rows;
-                }
-
-                if (continueSearchUntilRows < 0)
-                {
-                    continueSearchUntilRows = Math.Max(MinimumOverlapRows, rows - 96);
-                }
-
-                if (rows <= continueSearchUntilRows)
-                {
-                    return bestAcceptableRows;
-                }
-            }
         }
 
-        if (bestAcceptableRows != 0)
-        {
-            return bestAcceptableRows;
-        }
-
+        // Only trust a reasonably confident match; otherwise don't crop. A small duplicate seam is
+        // less harmful than dropping real content on a bad guess.
         return bestScore <= AcceptableOverlapScore * 1.8 ? bestRows : 0;
     }
 

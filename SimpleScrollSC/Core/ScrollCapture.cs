@@ -9,6 +9,11 @@ public static class ScrollCapture
     private const int GenericLineScrollsPerStep = 3;
     private const double MinimumMovementDifference = 3.0;
 
+    // Manual mode keeps scrolling until the user stops it, but a run of frames with no new
+    // content means we've reached the end (or the surface can't be scrolled). Stop gracefully
+    // after this many consecutive stalls so we keep what we captured instead of looping forever.
+    private const int NoMovementStopStreak = 8;
+
     public static async Task<List<CapturedFrame>> CaptureAsync(
         CaptureOptions options,
         IProgress<CaptureProgress>? progress,
@@ -50,36 +55,34 @@ public static class ScrollCapture
                 if (movementDiff < movementThreshold)
                 {
                     noMovementStreak++;
-                    progress?.Report(new CaptureProgress("Capturing", null, frames.Count, "Scroll did not move; retrying"));
 
+                    // Auto mode treats a scroll that produced no new content as "reached the bottom".
                     if (options.CaptureMode == CaptureMode.AutoUntilBottom)
                     {
-                        progress?.Report(new CaptureProgress("Capturing", 90, frames.Count, "Scrolling did not move; stopping"));
+                        progress?.Report(new CaptureProgress("Capturing", 90, frames.Count, "Reached the bottom; stopping"));
                         break;
                     }
 
-                    if (noMovementStreak >= 8)
+                    // Manual mode keeps trying (lazy-loaded content may still appear) but stops
+                    // gracefully after a streak of stalls, keeping the frames captured so far
+                    // instead of throwing the whole capture away or looping to MaxFrames.
+                    progress?.Report(new CaptureProgress("Capturing", null, frames.Count, $"No new content ({noMovementStreak}/{NoMovementStopStreak})"));
+                    if (noMovementStreak >= NoMovementStopStreak)
                     {
-                        throw new InvalidOperationException("Scrolling did not move for several steps. Try bringing the target to the foreground or adjusting the scroll speed.");
+                        progress?.Report(new CaptureProgress("Capturing", 90, frames.Count, "Reached the end; stopping"));
+                        break;
                     }
 
                     continue;
                 }
 
                 noMovementStreak = 0;
-
-                if (options.CaptureMode == CaptureMode.AutoUntilBottom)
-                {
-                    if (movementDiff < options.DifferenceThreshold)
-                    {
-                        progress?.Report(new CaptureProgress("Capturing", 90, frames.Count, "Bottom reached"));
-                        break;
-                    }
-
-                    previous = next;
-                }
-
                 frames.Add(next);
+
+                // Advance the reference frame for BOTH modes. Without this, manual mode would keep
+                // comparing every new frame against the very first one, so duplicate/stall detection
+                // (and the settle/fallback logic in ScrollAndCaptureNextAsync) would never work.
+                previous = next;
 
                 // Safety caps: prevent runaway RAM and stitched output overflows.
                 long estimatedCapturedBytes = bytesPerFrame * frames.Count;
@@ -175,7 +178,13 @@ public static class ScrollCapture
                 NativeMethods.SendMessage(hwnd, NativeMethods.WM_VSCROLL, new IntPtr(NativeMethods.SB_LINEDOWN), IntPtr.Zero);
             }
 
-            return;
+            // Only escalate to wheel input when the gentle attempt already failed. Many modern
+            // (non-browser) apps ignore WM_VSCROLL and only move for a real mouse-wheel event,
+            // so fall through to the wheel/SendInput path on the foreground fallback.
+            if (!forceForegroundFallback)
+            {
+                return;
+            }
         }
 
         if (!NativeMethods.GetWindowRect(hwnd, out NativeMethods.RECT rect))
