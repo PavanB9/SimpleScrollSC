@@ -1,10 +1,63 @@
 # SimpleScrollSC
 
-SimpleScrollSC is a lightweight Windows desktop app that captures scrolling screenshots of a selected window and stitches the captured viewports into one high-resolution image.
+Capture a scrolling screenshot of any window and save it as a single tall image — no browser extension, no subscriptions, no internet connection required.
 
-## Build
+## Download
 
-This repo is set up to keep tooling local. The portable SDK lives in `.dotnet\` and is intentionally ignored by Git.
+**[⬇ Download SimpleScrollSC.exe](https://github.com/PavanB9/SimpleScrollSC/releases/latest/download/SimpleScrollSC.exe)**
+
+No installation needed. Just download and run. Windows only.
+
+> The file is ~69 MB because it bundles the .NET runtime so you don't need to install anything separately. Windows may show a SmartScreen warning on first run — click **More info → Run anyway**.
+
+---
+
+## How to use
+
+1. **Launch** `SimpleScrollSC.exe`.
+2. Click **Pick window** and then click the window you want to capture.
+3. Choose a scroll speed (Medium works well for most things).
+4. Click **Capture** and pick where to save the image.
+5. Keep the target window visible while it runs — it captures automatically.
+6. Press **Esc** at any time to stop early.
+
+The app minimizes itself during capture so it stays out of the way. When it's done, a preview appears with the image dimensions and file size.
+
+### Area mode
+
+Check **Select area + click-to-start/stop** to capture just a portion of the window instead of the whole thing. After picking a window, drag to select the region you want, then use **Start** / **Esc** to control the capture manually.
+
+---
+
+## Tips
+
+- **Browsers (Chrome, Edge, Firefox)** — works great for capturing long web pages.
+- **Slow speed** — use this for content that loads as you scroll (social feeds, infinite scroll).
+- **Fast speed** — use this for simple documents or apps that scroll smoothly.
+- If the output looks repeated or jumbled, try a slower speed.
+- The window being captured must stay visible and not be minimized while running.
+
+---
+
+## Known limitations
+
+- Hardware-accelerated, DRM-protected, or fully GPU-rendered content may capture as black.
+- Minimized windows cannot be captured.
+- Pages with sticky headers, animations, or custom scroll containers may stitch imperfectly.
+- Some apps ignore simulated scroll input — try bringing the window to the foreground first.
+
+---
+
+## Build from source
+
+Requires Windows and a .NET 8 SDK. If you don't have the local SDK, bootstrap it once (stays inside the repo, not committed):
+
+```powershell
+Invoke-WebRequest https://dot.net/v1/dotnet-install.ps1 -OutFile dotnet-install.ps1
+./dotnet-install.ps1 -Channel 8.0 -InstallDir .dotnet
+```
+
+Then build and run:
 
 If you don't have the local SDK yet, bootstrap it once (this stays inside the repo and is not committed):
 
@@ -18,52 +71,13 @@ Then build and publish:
 ```powershell
 $env:DOTNET_CLI_HOME=(Resolve-Path .).Path
 $env:DOTNET_CLI_TELEMETRY_OPTOUT='1'
-\.\.dotnet\dotnet.exe restore SimpleScrollSC.sln --configfile NuGet.Config
-\.\.dotnet\dotnet.exe build SimpleScrollSC.sln --no-restore
-\.\.dotnet\dotnet.exe publish SimpleScrollSC\SimpleScrollSC.csproj -c Release --no-restore
+.\.dotnet\dotnet.exe publish SimpleScrollSC\SimpleScrollSC.csproj -c Release --self-contained true
 ```
 
-On a machine with a normal .NET 8 SDK installed, the same commands work with `dotnet` instead of `.\.dotnet\dotnet.exe`.
+Or just double-click `run.cmd`.
 
-## Quick Run
-
-From the repo root:
-
-- `run.cmd` (double-click), or
-- PowerShell: `./run.ps1`
-
-This publishes a self-contained Release build and launches `SimpleScrollSC.exe`.
-
-## Usage
-
-1. Launch SimpleScrollSC.
-2. Press **Pick window** and click the window you want to capture.
-3. Pick a scroll speed. Medium is the default and is intentionally conservative.
-4. Press Capture and choose the PNG or JPEG output path.
-5. Keep the target window visible and unchanged while capture runs.
-6. Press **Esc** at any time to cancel/stop the capture.
-
-During capture, the SimpleScrollSC window auto-minimizes so it won't accidentally cover the target.
-
-The app waits 500ms before capturing, scrolls the target, detects when the bottom is reached, stitches matching overlaps, and then shows a thumbnail with dimensions and file size. Custom area mode uses slower scrolling by default to improve stitch quality.
-
-The main window is resizable; the preview card updates after each capture.
-
-## Known Limitations
-
-- Hardware-accelerated, protected, or DRM content may capture as black or blank.
-- Minimized windows cannot be captured.
-- Windows that move or resize during capture are aborted to avoid malformed output.
-- Pages with sticky headers, animations, lazy loading, or custom scroll containers can reduce stitch quality.
-- Some applications reject synthetic scroll input or use nonstandard scrolling surfaces.
-- Browser capture uses mouse wheel simulation at the window center, so the intended scrollable area must be under that point.
-
-SimpleScrollSC is fully offline. It does not make network calls, collect telemetry, or run in the background.
+---
 
 ## Icon
 
-SimpleScrollSC uses `icons8-scroll-48.png` for the window/taskbar icon.
-Icon credit: Icons by Icons8 — https://icons8.com
-The Explorer icon for `SimpleScrollSC.exe` uses `AppIcon.ico`, configured via `ApplicationIcon` in `SimpleScrollSC/SimpleScrollSC.csproj`.
-
-Note: Windows Explorer caches icons; if it doesnt update right away, refresh the folder (F5) or restart Explorer.
+Icon by [Icons8](https://icons8.com).
